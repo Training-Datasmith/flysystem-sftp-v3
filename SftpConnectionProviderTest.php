@@ -89,7 +89,7 @@ class SftpConnectionProviderTest extends TestCase
         ]);
 
         $connection = null;
-        $this->runWithRetries(function () use (&$connection, $provider) {
+        $this->runWithRetries(function () use (&$connection, $provider): void {
             $connection = $provider->provideConnection();
         });
         $this->assertInstanceOf(SFTP::class, $connection);
@@ -111,7 +111,7 @@ class SftpConnectionProviderTest extends TestCase
 
         $this->expectException(UnableToLoadPrivateKey::class);
 
-        $this->runWithRetries(fn () => $provider->provideConnection(), UnableToLoadPrivateKey::class);
+        $this->runWithRetries(fn (): \phpseclib3\Net\SFTP => $provider->provideConnection(), UnableToLoadPrivateKey::class);
     }
 
     /**
@@ -133,7 +133,7 @@ class SftpConnectionProviderTest extends TestCase
         );
 
         $connection = null;
-        $this->runWithRetries(function () use ($provider, &$connection) {
+        $this->runWithRetries(function () use ($provider, &$connection): void {
             $connection = $provider->provideConnection();
         });
         $this->assertInstanceOf(SFTP::class, $connection);
@@ -175,7 +175,7 @@ class SftpConnectionProviderTest extends TestCase
         );
 
         $connection = null;
-        $this->runWithRetries(function () use ($provider, &$connection) {
+        $this->runWithRetries(function () use ($provider, &$connection): void {
             $connection = $provider->provideConnection();
         });
         $this->assertInstanceOf(SFTP::class, $connection);
@@ -197,7 +197,7 @@ class SftpConnectionProviderTest extends TestCase
         );
 
         $this->expectExceptionObject(UnableToAuthenticate::withPrivateKey());
-        $this->runWithRetries(fn () => $provider->provideConnection(), UnableToAuthenticate::class);
+        $this->runWithRetries(fn (): \phpseclib3\Net\SFTP => $provider->provideConnection(), UnableToAuthenticate::class);
     }
 
     /**
@@ -219,7 +219,7 @@ class SftpConnectionProviderTest extends TestCase
         );
 
         $connection = null;
-        $this->runWithRetries(function () use ($provider, &$connection) {
+        $this->runWithRetries(function () use ($provider, &$connection): void {
             $connection = $provider->provideConnection();
         });
         $this->assertInstanceOf(SFTP::class, $connection);
@@ -241,7 +241,7 @@ class SftpConnectionProviderTest extends TestCase
                 'hostFingerprint' => 'invalid:fingerprint',
             ]
         );
-        $this->runWithRetries(fn () => $provider->provideConnection(), UnableToEstablishAuthenticityOfHost::class);
+        $this->runWithRetries(fn (): \phpseclib3\Net\SFTP => $provider->provideConnection(), UnableToEstablishAuthenticityOfHost::class);
     }
 
     /**
@@ -260,7 +260,7 @@ class SftpConnectionProviderTest extends TestCase
             ]
         );
 
-        $this->runWithRetries(fn () => $provider->provideConnection(), UnableToAuthenticate::class);
+        $this->runWithRetries(fn (): \phpseclib3\Net\SFTP => $provider->provideConnection(), UnableToAuthenticate::class);
     }
 
     /**

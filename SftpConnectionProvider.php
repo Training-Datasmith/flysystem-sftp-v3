@@ -19,15 +19,9 @@ use function str_split;
 class SftpConnectionProvider implements ConnectionProvider
 {
 
-    /**
-     * @var SFTP|null
-     */
-    private $connection;
+    private ?\phpseclib3\Net\SFTP $connection = null;
 
-    /**
-     * @var ConnectivityChecker
-     */
-    private $connectivityChecker;
+    private \League\Flysystem\PhpseclibV3\ConnectivityChecker $connectivityChecker;
 
     public function __construct(
         private string $host,
@@ -188,7 +182,7 @@ class SftpConnectionProvider implements ConnectionProvider
 
     private function loadPrivateKey(): AsymmetricKey
     {
-        if (("---" !== substr($this->privateKey, 0, 3) || "PuTTY" !== substr($this->privateKey, 0, 5)) && is_file($this->privateKey)) {
+        if ((!str_starts_with($this->privateKey, "---") || !str_starts_with($this->privateKey, "PuTTY")) && is_file($this->privateKey)) {
             $this->privateKey = file_get_contents($this->privateKey);
         }
 

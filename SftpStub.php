@@ -55,7 +55,6 @@ class SftpStub extends SFTP
      * @param int             $mode
      * @param int             $start
      * @param int             $local_start
-     * @param null            $progressCallback
      *
      * @return bool
      */
@@ -79,10 +78,8 @@ class SftpStub extends SFTP
 
     /**
      * @param array<int,mixed> $arguments
-     *
-     * @return string
      */
-    private function formatTripKey(...$arguments): string
+    private function formatTripKey(string ...$arguments): string
     {
         $key = '';
 

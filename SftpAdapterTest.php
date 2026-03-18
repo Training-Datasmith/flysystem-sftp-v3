@@ -30,10 +30,7 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
         }
     }
 
-    /**
-     * @var StubSftpConnectionProvider
-     */
-    private static $connectionProvider;
+    private static ?\League\Flysystem\PhpseclibV3\StubSftpConnectionProvider $connectionProvider = null;
 
     /**
      * @var SftpStub
@@ -237,7 +234,7 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
      */
     public function moving_a_file_and_overwriting(): void
     {
-        $this->runScenario(function() {
+        $this->runScenario(function(): void {
             $adapter = $this->adapter();
             $adapter->write(
                 'source.txt',
@@ -272,9 +269,6 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
         return static::$connectionProvider;
     }
 
-    /**
-     * @return SftpAdapter
-     */
     private function adapterWithInvalidRoot(): SftpAdapter
     {
         $provider = static::connectionProvider();

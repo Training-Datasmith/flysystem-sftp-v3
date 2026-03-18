@@ -9,12 +9,9 @@ use RuntimeException;
 
 class UnableToAuthenticate extends RuntimeException implements FilesystemException
 {
-    private ?string $connectionError;
-
-    public function __construct(string $message, ?string $lastError = null)
+    public function __construct(string $message, private ?string $connectionError = null)
     {
         parent::__construct($message);
-        $this->connectionError = $lastError;
     }
 
     public static function withPassword(?string $lastError = null): UnableToAuthenticate
