@@ -4,19 +4,22 @@ declare(strict_types=1);
 
 namespace League\Flysystem\PhpseclibV3;
 
-use phpseclib3\Net\SFTP;
-use PHPUnit\Framework\TestCase;
-use Throwable;
-
 use function base64_decode;
 use function class_exists;
 use function explode;
+
 use function getenv;
 use function hash;
 use function implode;
 use function is_a;
+
+use phpseclib3\Net\SFTP;
+use PHPUnit\Framework\TestCase;
+
 use function sleep;
 use function str_split;
+
+use Throwable;
 
 /**
  * @group sftp
@@ -25,12 +28,12 @@ use function str_split;
  */
 class SftpConnectionProviderTest extends TestCase
 {
-    const KEX_ACCEPTED_BY_DEFAULT_OPENSSH_BUT_DISABLED_IN_EDDSA_ONLY = 'diffie-hellman-group14-sha256';
+    public const KEX_ACCEPTED_BY_DEFAULT_OPENSSH_BUT_DISABLED_IN_EDDSA_ONLY = 'diffie-hellman-group14-sha256';
 
     public static function setUpBeforeClass(): void
     {
-        if ( ! class_exists(SFTP::class)) {
-            self::markTestIncomplete("No phpseclib v3 installed");
+        if (! class_exists(SFTP::class)) {
+            self::markTestIncomplete('No phpseclib v3 installed');
         }
     }
 
@@ -268,7 +271,7 @@ class SftpConnectionProviderTest extends TestCase
      */
     public function retries_several_times_until_failure(): void
     {
-        $connectivityChecker = new class implements ConnectivityChecker {
+        $connectivityChecker = new class () implements ConnectivityChecker {
             /** @var int */
             public $calls = 0;
 

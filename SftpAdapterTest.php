@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace League\Flysystem\PhpseclibV3;
 
+use function class_exists;
+
 use League\Flysystem\AdapterTestUtilities\FilesystemAdapterTestCase;
 use League\Flysystem\Config;
 use League\Flysystem\FilesystemAdapter;
@@ -13,9 +15,8 @@ use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
 use League\Flysystem\Visibility;
-use phpseclib3\Net\SFTP;
 
-use function class_exists;
+use phpseclib3\Net\SFTP;
 
 /**
  * @group sftp
@@ -25,8 +26,8 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
 {
     public static function setUpBeforeClass(): void
     {
-        if ( ! class_exists(SFTP::class)) {
-            self::markTestIncomplete("No phpseclib v3 installed");
+        if (! class_exists(SFTP::class)) {
+            self::markTestIncomplete('No phpseclib v3 installed');
         }
     }
 
@@ -234,7 +235,7 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
      */
     public function moving_a_file_and_overwriting(): void
     {
-        $this->runScenario(function(): void {
+        $this->runScenario(function (): void {
             $adapter = $this->adapter();
             $adapter->write(
                 'source.txt',
@@ -262,7 +263,7 @@ class SftpAdapterTest extends FilesystemAdapterTestCase
 
     private static function connectionProvider(): StubSftpConnectionProvider
     {
-        if ( ! static::$connectionProvider instanceof ConnectionProvider) {
+        if (! static::$connectionProvider instanceof ConnectionProvider) {
             static::$connectionProvider = new StubSftpConnectionProvider('localhost', 'foo', 'pass', 2222);
         }
 

@@ -4,21 +4,23 @@ declare(strict_types=1);
 
 namespace League\Flysystem\PhpseclibV3;
 
+use function base64_decode;
+use function implode;
+
 use League\Flysystem\FilesystemException;
 use phpseclib3\Crypt\Common\AsymmetricKey;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Exception\NoKeyLoadedException;
 use phpseclib3\Net\SFTP;
-use phpseclib3\System\SSH\Agent;
-use Throwable;
 
-use function base64_decode;
-use function implode;
+use phpseclib3\System\SSH\Agent;
+
 use function str_split;
+
+use Throwable;
 
 class SftpConnectionProvider implements ConnectionProvider
 {
-
     private ?\phpseclib3\Net\SFTP $connection = null;
 
     private \League\Flysystem\PhpseclibV3\ConnectivityChecker $connectivityChecker;
@@ -63,7 +65,7 @@ class SftpConnectionProvider implements ConnectionProvider
             throw UnableToConnectToSftpHost::atHostname($this->host, $exception);
         }
 
-        if ( ! $this->connectivityChecker->isConnected($connection)) {
+        if (! $this->connectivityChecker->isConnected($connection)) {
             $connection->disconnect();
             $this->connection = null;
 
@@ -104,7 +106,7 @@ class SftpConnectionProvider implements ConnectionProvider
 
     private function checkFingerprint(SFTP $connection): void
     {
-        if ( ! $this->hostFingerprint) {
+        if (! $this->hostFingerprint) {
             return;
         }
 
@@ -142,7 +144,7 @@ class SftpConnectionProvider implements ConnectionProvider
 
     private function authenticateWithUsernameAndPassword(SFTP $connection): void
     {
-        if ( ! $connection->login($this->username, $this->password)) {
+        if (! $connection->login($this->username, $this->password)) {
             throw UnableToAuthenticate::withPassword($connection->getLastError());
         }
     }
@@ -182,7 +184,7 @@ class SftpConnectionProvider implements ConnectionProvider
 
     private function loadPrivateKey(): AsymmetricKey
     {
-        if ((!str_starts_with($this->privateKey, "---") || !str_starts_with($this->privateKey, "PuTTY")) && is_file($this->privateKey)) {
+        if ((!str_starts_with($this->privateKey, '---') || !str_starts_with($this->privateKey, 'PuTTY')) && is_file($this->privateKey)) {
             $this->privateKey = file_get_contents($this->privateKey);
         }
 
@@ -201,7 +203,7 @@ class SftpConnectionProvider implements ConnectionProvider
     {
         $agent = new Agent();
 
-        if ( ! $connection->login($this->username, $agent)) {
+        if (! $connection->login($this->username, $agent)) {
             throw UnableToAuthenticate::withSshAgent($connection->getLastError());
         }
     }

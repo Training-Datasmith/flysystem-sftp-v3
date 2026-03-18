@@ -29,11 +29,11 @@ class SimpleConnectivityChecker implements ConnectivityChecker
 
     public function isConnected(SFTP $connection): bool
     {
-        if ( ! $connection->isConnected()) {
+        if (! $connection->isConnected()) {
             return false;
         }
 
-        if ( ! $this->usePing) {
+        if (! $this->usePing) {
             return true;
         }
 

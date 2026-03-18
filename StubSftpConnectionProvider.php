@@ -30,7 +30,7 @@ class StubSftpConnectionProvider implements ConnectionProvider
 
     public function provideConnection(): SFTP
     {
-        if ( ! $this->connection instanceof SFTP || ! $this->connection->isConnected()) {
+        if (! $this->connection instanceof SFTP || ! $this->connection->isConnected()) {
             $connection = new SftpStub($this->host, $this->port);
             $connection->login($this->username, $this->password);
 
