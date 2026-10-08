@@ -114,6 +114,15 @@ php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
 DEFAULT_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-default.log | tail -n 6)"
 RANDOM_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-random.log | tail -n 6)"
 
+PHPUNIT_FAILURES="$(grep -E "^Failures:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_ERRORS="$(grep -E "^Errors:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_SKIPPED="$(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1)"
+PHPUNIT_INCOMPLETE="$(grep -E "^Incomplete:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_FAILURES="${PHPUNIT_FAILURES:-0}"
+PHPUNIT_ERRORS="${PHPUNIT_ERRORS:-0}"
+PHPUNIT_SKIPPED="${PHPUNIT_SKIPPED:-0}"
+PHPUNIT_INCOMPLETE="${PHPUNIT_INCOMPLETE:-0}"
+
 git config --global --add safe.directory /app
 BRANCH="$(git -C /app rev-parse --abbrev-ref HEAD)"
 SHA="$(git -C /app rev-parse HEAD)"
@@ -126,9 +135,9 @@ branch: ${BRANCH}
 sha: ${SHA}
 tests: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\(([0-9]+) tests.*/\\1/p; s/^Tests: ([0-9]+).*/\\1/p" | head -n1)
 assertions: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\([0-9]+ tests, ([0-9]+) assertions.*/\\1/p; s/^Tests: [0-9]+, Assertions: ([0-9]+).*/\\1/p" | head -n1)
-failures: $(grep -E "^Failures:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")
-errors: $(grep -E "^Errors:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")
-skipped/incomplete: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1 || echo 0) skipped, $(grep -E "^Incomplete:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//" || echo 0) incomplete
+failures: ${PHPUNIT_FAILURES:-0}
+errors: ${PHPUNIT_ERRORS:-0}
+skipped/incomplete: ${PHPUNIT_SKIPPED:-0} skipped, ${PHPUNIT_INCOMPLETE:-0} incomplete
 php: ${PHP_VERSION}
 composer: ${COMPOSER_VERSION}
 openssh: ${OPENSSH_VERSION}
