@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PHP_IMAGE='php@sha256:f93c435550489262d463e81de0d5fe0f8228903e474441db916aa994fbfbb853'
+PHP_IMAGE_DIGEST='sha256:f93c435550489262d463e81de0d5fe0f8228903e474441db916aa994fbfbb853'
 ARTIFACT_DIR='/opt/cursor/artifacts'
 ARTIFACT_FILE="${ARTIFACT_DIR}/suite-results.md"
 RANDOM_SEED='20261008'
@@ -45,6 +46,7 @@ HOST_BRANCH="$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD)"
   -e RANDOM_SEED="${RANDOM_SEED}" \
   -e HOST_SHA="${HOST_SHA}" \
   -e HOST_BRANCH="${HOST_BRANCH}" \
+  -e PHP_IMAGE_DIGEST="${PHP_IMAGE_DIGEST}" \
   -v "${ROOT}:/app" \
   -v "${ARTIFACT_DIR}:/opt/cursor/artifacts" \
   -w /app \
@@ -96,8 +98,30 @@ COMPOSER_VERSION="$(composer --version --no-ansi)"
 OPENSSH_VERSION="$(dpkg-query -W openssh-server 2>/dev/null | cut -f2 || true)"
 PKG_VERSIONS="$(composer show --no-ansi --direct 2>/dev/null | awk "{print \$1\"=\"\$2}" | tr "\n" "; ")"
 
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --log-junit /tmp/phpunit-default.xml 2>&1 | tee /tmp/phpunit-default.log
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --order-by=random --random-order-seed "${RANDOM_SEED}" 2>&1 | tee /tmp/phpunit-random.log
+run_phpunit() {
+  local name="$1"
+  shift
+  local cmd=(php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result "$@")
+  printf "COMMAND[%s]: %q\n" "${name}" "${cmd[@]}"
+  set +e
+  "${cmd[@]}" 2>&1 | tee "/tmp/phpunit-${name}.log"
+  local rc=$?
+  set -e
+  echo "${rc}" >"/tmp/phpunit-${name}.rc"
+  printf "EXIT[%s]: %s\n" "${name}" "${rc}"
+}
+
+run_phpunit default-1
+run_phpunit default-2
+run_phpunit random-1 --order-by=random --random-order-seed "${RANDOM_SEED}"
+run_phpunit random-2 --order-by=random --random-order-seed "${RANDOM_SEED}"
+
+for gate in default-1 default-2 random-1 random-2; do
+  if [ "$(cat "/tmp/phpunit-${gate}.rc")" -ne 0 ]; then
+    echo "expected ${gate} gate to pass" >&2
+    exit 1
+  fi
+done
 
 # Demonstrate stat-cache regression without the fromArray fix.
 cp SftpConnectionProvider.php /tmp/SftpConnectionProvider.php.bak
@@ -116,13 +140,39 @@ fi
 php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
   --filter "testDisableStatCacheFalseServesTheCachedSize|testFromArrayCopiesEveryOption"
 
-DEFAULT_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-default.log | tail -n 6)"
-RANDOM_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-random.log | tail -n 6)"
+cp SftpAdapter.php /tmp/SftpAdapter.php.bak
+php scripts/revert-listcontents-cast.php SftpAdapter.php
+set +e
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
+  --filter testListContentsCastsNumericRawlistKeysToStringPaths 2>&1 | tee /tmp/phpunit-listcontents-cast-broken.log
+LISTCONTENTS_CAST_DEMO_RC=$?
+set -e
+mv /tmp/SftpAdapter.php.bak SftpAdapter.php
+if [ "${LISTCONTENTS_CAST_DEMO_RC}" -eq 0 ]; then
+  echo "expected numeric rawlist test to fail without (string) cast" >&2
+  exit 1
+fi
 
-PHPUNIT_FAILURES="$(grep -E "^Failures:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
-PHPUNIT_ERRORS="$(grep -E "^Errors:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
-PHPUNIT_SKIPPED="$(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1)"
-PHPUNIT_INCOMPLETE="$(grep -E "^Incomplete:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+cp SftpAdapter.php /tmp/SftpAdapter.php.bak
+php scripts/revert-copy-decline-visibility.php SftpAdapter.php
+set +e
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
+  --filter testCopyCanDeclineRetainedVisibility 2>&1 | tee /tmp/phpunit-copy-visibility-broken.log
+COPY_VISIBILITY_DEMO_RC=$?
+set -e
+mv /tmp/SftpAdapter.php.bak SftpAdapter.php
+if [ "${COPY_VISIBILITY_DEMO_RC}" -eq 0 ]; then
+  echo "expected copy decline-visibility test to fail when retain is forced" >&2
+  exit 1
+fi
+
+DEFAULT_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-default-1.log | tail -n 6)"
+RANDOM_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-random-1.log | tail -n 6)"
+
+PHPUNIT_FAILURES="$(grep -E "^Failures:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_ERRORS="$(grep -E "^Errors:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_SKIPPED="$(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default-1.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1)"
+PHPUNIT_INCOMPLETE="$(grep -E "^Incomplete:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
 PHPUNIT_FAILURES="${PHPUNIT_FAILURES:-0}"
 PHPUNIT_ERRORS="${PHPUNIT_ERRORS:-0}"
 PHPUNIT_SKIPPED="${PHPUNIT_SKIPPED:-0}"
@@ -137,24 +187,33 @@ repo: Training-Datasmith/flysystem-sftp-v3
 date: ${DATE}
 branch: ${BRANCH}
 sha: ${SHA}
-tests: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\(([0-9]+) tests.*/\\1/p; s/^Tests: ([0-9]+).*/\\1/p" | head -n1)
-assertions: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\([0-9]+ tests, ([0-9]+) assertions.*/\\1/p; s/^Tests: [0-9]+, Assertions: ([0-9]+).*/\\1/p" | head -n1)
+tests: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default-1.log | tail -n1 | sed -nE "s/^OK \\(([0-9]+) tests.*/\\1/p; s/^Tests: ([0-9]+).*/\\1/p" | head -n1)
+assertions: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default-1.log | tail -n1 | sed -nE "s/^OK \\([0-9]+ tests, ([0-9]+) assertions.*/\\1/p; s/^Tests: [0-9]+, Assertions: ([0-9]+).*/\\1/p" | head -n1)
 failures: ${PHPUNIT_FAILURES}
 errors: ${PHPUNIT_ERRORS}
 skipped/incomplete: ${PHPUNIT_SKIPPED} skipped, ${PHPUNIT_INCOMPLETE} incomplete
 php: ${PHP_VERSION}
+image_digest: ${PHP_IMAGE_DIGEST}
 composer: ${COMPOSER_VERSION}
 openssh: ${OPENSSH_VERSION}
 resolved_packages: ${PKG_VERSIONS}
 extensions_verified: dom;mbstring;xml;xmlwriter;sockets
-command: php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result (plus random --order-by=random --random-order-seed ${RANDOM_SEED})
+error_reporting: -1
 random_seed: ${RANDOM_SEED}
+commands: |
+  php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result
+  php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result
+  php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --order-by=random --random-order-seed ${RANDOM_SEED}
+  php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --order-by=random --random-order-seed ${RANDOM_SEED}
+exit_codes: default-1=$(cat /tmp/phpunit-default-1.rc); default-2=$(cat /tmp/phpunit-default-2.rc); random-1=$(cat /tmp/phpunit-random-1.rc); random-2=$(cat /tmp/phpunit-random-2.rc)
 fingerprint_literals_derivation: blob base64 Zml4dHVyZS1rZXktbWF0ZXJpYWw= (fixture-key-material); MD5 colon-hex verified via openssl dgst -md5; SHA-512 colon-hex verified via openssl dgst -sha512 (see SftpConnectionProviderFingerprintTest docblock)
 notes: |
   PRODUCTION CHANGES: SftpConnectionProvider::fromArray() now forwards disableStatCache (default true).
   DEFERRED: listContents root double-slash normalization; private-key prefix OR condition; delete return handling; SSH agent; fingerprint format expansions.
   ENVIRONMENT: Digest-pinned php:8.0.2-cli (amd64), Composer 2.2 with verified installer, config.platform.php=8.0.2, composer.lock removed on exit (not committed).
   STAT_CACHE_DEMO_WITHOUT_FIX: exit ${STAT_CACHE_DEMO_RC} (non-zero expected).
+  LISTCONTENTS_CAST_DEMO_WITHOUT_FIX: exit ${LISTCONTENTS_CAST_DEMO_RC} (non-zero expected).
+  COPY_DECLINE_VISIBILITY_DEMO_WITHOUT_FIX: exit ${COPY_VISIBILITY_DEMO_RC} (non-zero expected).
   DEFAULT_RUN_SUMMARY:
 ${DEFAULT_SUMMARY}
   RANDOM_RUN_SUMMARY:

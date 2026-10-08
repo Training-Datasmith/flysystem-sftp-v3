@@ -34,6 +34,9 @@ class RecordingSftp extends SFTP
     /** @var list<array{0: string, 1: array<int, mixed>}> */
     public array $calls = [];
 
+    /** @var array<string, array<int|string, array<string, mixed>>> */
+    private array $rawlistExtras = [];
+
     public function __construct()
     {
         parent::__construct(fopen('php://temp', 'w+'));
@@ -73,6 +76,15 @@ class RecordingSftp extends SFTP
     public function armRenameFailOnce(string $destination): void
     {
         $this->renameFailOnceDestination = $destination;
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    public function seedRawlistEntryWithNumericKey(string $parentDir, int $key, array $attributes): void
+    {
+        $dir = $this->normalizeDir($parentDir);
+        $this->rawlistExtras[$dir][$key] = $attributes;
     }
 
     public function renameCallCount(): int
@@ -359,6 +371,12 @@ class RecordingSftp extends SFTP
                 'mtime' => 1700000000,
                 'type' => NET_SFTP_TYPE_REGULAR,
             ];
+        }
+
+        if (isset($this->rawlistExtras[$dir])) {
+            foreach ($this->rawlistExtras[$dir] as $name => $attributes) {
+                $listing[$name] = $attributes;
+            }
         }
 
         return $listing;

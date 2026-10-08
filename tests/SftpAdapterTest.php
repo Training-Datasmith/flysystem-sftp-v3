@@ -380,6 +380,23 @@ final class SftpAdapterTest extends TestCase
         self::assertSame([], $items);
     }
 
+    public function testListContentsCastsNumericRawlistKeysToStringPaths(): void
+    {
+        $this->sftp->seedDirectory('/upload/sub/');
+        $this->sftp->seedRawlistEntryWithNumericKey('/upload/sub/', 123, [
+            'size' => 0,
+            'mode' => 0040755,
+            'mtime' => 1700000000,
+            'type' => NET_SFTP_TYPE_DIRECTORY,
+        ]);
+        $adapter = $this->adapter();
+        $items = iterator_to_array($adapter->listContents('sub', false));
+
+        self::assertCount(1, $items);
+        self::assertInstanceOf(DirectoryAttributes::class, $items[0]);
+        self::assertSame('sub/123', $items[0]->path());
+    }
+
     public function testDeleteRemovesThePrefixedFile(): void
     {
         $adapter = $this->adapter();
@@ -472,6 +489,8 @@ final class SftpAdapterTest extends TestCase
         $adapter->write('src.txt', 'payload', new Config([Config::OPTION_VISIBILITY => Visibility::PRIVATE]));
         $adapter->copy('src.txt', 'dst.txt', new Config([Config::OPTION_RETAIN_VISIBILITY => false]));
         self::assertSame('payload', $adapter->read('dst.txt'));
+        self::assertSame(Visibility::PRIVATE, $adapter->visibility('src.txt')->visibility());
+        self::assertNotSame(Visibility::PRIVATE, $adapter->visibility('dst.txt')->visibility());
     }
 
     public function testCopyExplicitVisibilityWins(): void
