@@ -88,10 +88,9 @@ composer update --no-interaction --prefer-dist --no-progress
 
 PHP_VERSION="$(php -r "echo PHP_VERSION;")"
 COMPOSER_VERSION="$(composer --version --no-ansi)"
-OPENSSH_VERSION="$(dpkg-query -W -f='openssh-server ${Version}' openssh-server 2>/dev/null || true)"
+OPENSSH_VERSION="$(dpkg-query -W openssh-server 2>/dev/null | cut -f2 || true)"
 PKG_VERSIONS="$(composer show --no-ansi --direct 2>/dev/null | awk "{print \$1\"=\"\$2}" | tr "\n" "; ")"
 
-export PHP_INI_SCAN_DIR=""
 php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --log-junit /tmp/phpunit-default.xml 2>&1 | tee /tmp/phpunit-default.log
 php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --order-by=random --random-order-seed "${RANDOM_SEED}" 2>&1 | tee /tmp/phpunit-random.log
 
