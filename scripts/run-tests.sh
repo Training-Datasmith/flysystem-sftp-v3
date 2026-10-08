@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+PHP_IMAGE='php@sha256:f93c435550489262d463e81de0d5fe0f8228903e474441db916aa994fbfbb853'
+ARTIFACT_DIR='/opt/cursor/artifacts'
+ARTIFACT_FILE="${ARTIFACT_DIR}/suite-results.md"
+RANDOM_SEED='20261008'
+
+cleanup_lock() {
+  rm -f "${ROOT}/composer.lock"
+}
+trap cleanup_lock EXIT
+
+mkdir -p "${ARTIFACT_DIR}"
+
+DOCKER=(docker)
+if ! docker info >/dev/null 2>&1; then
+  if sudo docker info >/dev/null 2>&1; then
+    DOCKER=(sudo docker)
+  fi
+fi
+
+if ! command -v docker >/dev/null 2>&1 && [ "${DOCKER[0]}" = "docker" ]; then
+  apt-get update
+  apt-get install -y docker.io
+  if ! docker info >/dev/null 2>&1; then
+    dockerd --storage-driver=vfs >/tmp/dockerd.log 2>&1 &
+    for _ in $(seq 1 60); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+fi
+
+"${DOCKER[@]}" pull --platform=linux/amd64 "${PHP_IMAGE}"
+
+"${DOCKER[@]}" run --rm --platform=linux/amd64 \
+  -e ARTIFACT_FILE="${ARTIFACT_FILE}" \
+  -e RANDOM_SEED="${RANDOM_SEED}" \
+  -v "${ROOT}:/app" \
+  -v "${ARTIFACT_DIR}:/opt/cursor/artifacts" \
+  -w /app \
+  "${PHP_IMAGE}" \
+  bash -lc '
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+export COMPOSER_ALLOW_SUPERUSER=1
+
+if grep -q deb.debian.org /etc/apt/sources.list 2>/dev/null; then
+  sed -i \
+    -e "s|http://deb.debian.org/debian|http://archive.debian.org/debian|g" \
+    -e "s|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g" \
+    /etc/apt/sources.list
+  printf "Acquire::Check-Valid-Until \"false\";\n" >/etc/apt/apt.conf.d/99no-check-valid
+fi
+
+apt-get update
+apt-get install -y --no-install-recommends \
+  openssh-server \
+  openssh-client \
+  curl \
+  ca-certificates \
+  git \
+  unzip \
+  libxml2-dev \
+  libzip-dev \
+  zlib1g-dev \
+  libonig-dev \
+  pkg-config
+
+docker-php-ext-install sockets
+docker-php-ext-install dom mbstring xml
+
+php -m | grep -E "^(dom|mbstring|xml|xmlwriter|sockets)$" >/tmp/ext-check.txt
+for ext in dom mbstring xml xmlwriter sockets; do
+  php -m | grep -qx "${ext}" || { echo "missing extension: ${ext}"; exit 1; }
+done
+
+curl -fsSL -o /tmp/composer-setup.php https://getcomposer.org/installer
+curl -fsSL -o /tmp/composer-setup.sig https://composer.github.io/installer.sig
+php -r "exit(hash_file(\"sha384\", \"/tmp/composer-setup.php\") === trim(file_get_contents(\"/tmp/composer-setup.sig\")) ? 0 : 1);"
+php /tmp/composer-setup.php --2.2 --install-dir=/usr/local/bin --filename=composer
+
+composer update --no-interaction --prefer-dist --no-progress
+
+PHP_VERSION="$(php -r "echo PHP_VERSION;")"
+COMPOSER_VERSION="$(composer --version --no-ansi)"
+OPENSSH_VERSION="$(dpkg-query -W -f='openssh-server ${Version}' openssh-server 2>/dev/null || true)"
+PKG_VERSIONS="$(composer show --no-ansi --direct 2>/dev/null | awk "{print \$1\"=\"\$2}" | tr "\n" "; ")"
+
+export PHP_INI_SCAN_DIR=""
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --log-junit /tmp/phpunit-default.xml 2>&1 | tee /tmp/phpunit-default.log
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result --order-by=random --random-order-seed "${RANDOM_SEED}" 2>&1 | tee /tmp/phpunit-random.log
+
+# Demonstrate stat-cache regression without the fromArray fix.
+cp SftpConnectionProvider.php /tmp/SftpConnectionProvider.php.bak
+php scripts/revert-stat-cache.php SftpConnectionProvider.php
+set +e
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
+  --filter "testDisableStatCacheFalseServesTheCachedSize|testFromArrayCopiesEveryOption" 2>&1 | tee /tmp/phpunit-stat-cache-broken.log
+STAT_CACHE_DEMO_RC=$?
+set -e
+mv /tmp/SftpConnectionProvider.php.bak SftpConnectionProvider.php
+if [ "${STAT_CACHE_DEMO_RC}" -eq 0 ]; then
+  echo "expected stat-cache regression tests to fail without production fix" >&2
+  exit 1
+fi
+
+php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
+  --filter "testDisableStatCacheFalseServesTheCachedSize|testFromArrayCopiesEveryOption"
+
+DEFAULT_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-default.log | tail -n 6)"
+RANDOM_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-random.log | tail -n 6)"
+
+git config --global --add safe.directory /app
+BRANCH="$(git -C /app rev-parse --abbrev-ref HEAD)"
+SHA="$(git -C /app rev-parse HEAD)"
+DATE="$(date -u +%Y-%m-%d)"
+
+cat >"${ARTIFACT_FILE}" <<EOF
+repo: Training-Datasmith/flysystem-sftp-v3
+date: ${DATE}
+branch: ${BRANCH}
+sha: ${SHA}
+tests: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\(([0-9]+) tests.*/\\1/p; s/^Tests: ([0-9]+).*/\\1/p" | head -n1)
+assertions: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\([0-9]+ tests, ([0-9]+) assertions.*/\\1/p; s/^Tests: [0-9]+, Assertions: ([0-9]+).*/\\1/p" | head -n1)
+failures: $(grep -E "^Failures:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")
+errors: $(grep -E "^Errors:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")
+skipped/incomplete: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1 || echo 0) skipped, $(grep -E "^Incomplete:" /tmp/phpunit-default.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//" || echo 0) incomplete
+php: ${PHP_VERSION}
+composer: ${COMPOSER_VERSION}
+openssh: ${OPENSSH_VERSION}
+resolved_packages: ${PKG_VERSIONS}
+extensions_verified: dom;mbstring;xml;xmlwriter;sockets
+command: php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result (plus random --order-by=random --random-order-seed ${RANDOM_SEED})
+random_seed: ${RANDOM_SEED}
+fingerprint_literals_derivation: blob base64 Zml4dHVyZS1rZXktbWF0ZXJpYWw= (fixture-key-material); MD5 colon-hex verified via openssl dgst -md5; SHA-512 colon-hex verified via openssl dgst -sha512 (see SftpConnectionProviderFingerprintTest docblock)
+notes: |
+  PRODUCTION CHANGES: SftpConnectionProvider::fromArray() now forwards disableStatCache (default true).
+  DEFERRED: listContents root double-slash normalization; private-key prefix OR condition; delete return handling; SSH agent; fingerprint format expansions.
+  ENVIRONMENT: Digest-pinned php:8.0.2-cli (amd64), Composer 2.2 with verified installer, config.platform.php=8.0.2, composer.lock removed on exit (not committed).
+  STAT_CACHE_DEMO_WITHOUT_FIX: exit ${STAT_CACHE_DEMO_RC} (non-zero expected).
+  DEFAULT_RUN_SUMMARY:
+${DEFAULT_SUMMARY}
+  RANDOM_RUN_SUMMARY:
+${RANDOM_SUMMARY}
+EOF
+
+rm -f /app/composer.lock
+'
+
+echo "Wrote ${ARTIFACT_FILE}"

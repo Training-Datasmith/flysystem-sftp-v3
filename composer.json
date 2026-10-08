@@ -4,7 +4,12 @@
     "keywords": ["flysystem", "filesystem", "sftp", "files", "file"],
     "autoload": {
         "psr-4": {
-                "League\\Flysystem\\PhpseclibV3\\": ""
+            "League\\Flysystem\\PhpseclibV3\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "League\\Flysystem\\PhpseclibV3\\Tests\\": "tests/"
         }
     },
     "require": {
@@ -12,6 +17,14 @@
         "league/flysystem": "^3.0.14",
         "league/mime-type-detection": "^1.0.0",
         "phpseclib/phpseclib": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "9.6.38"
+    },
+    "config": {
+        "platform": {
+            "php": "8.0.2"
+        }
     },
     "license": "MIT",
     "authors": [
