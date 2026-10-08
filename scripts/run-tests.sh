@@ -37,9 +37,14 @@ fi
 
 "${DOCKER[@]}" pull --platform=linux/amd64 "${PHP_IMAGE}"
 
+HOST_SHA="$(git -C "${ROOT}" rev-parse HEAD)"
+HOST_BRANCH="$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD)"
+
 "${DOCKER[@]}" run --rm --platform=linux/amd64 \
   -e ARTIFACT_FILE="${ARTIFACT_FILE}" \
   -e RANDOM_SEED="${RANDOM_SEED}" \
+  -e HOST_SHA="${HOST_SHA}" \
+  -e HOST_BRANCH="${HOST_BRANCH}" \
   -v "${ROOT}:/app" \
   -v "${ARTIFACT_DIR}:/opt/cursor/artifacts" \
   -w /app \
@@ -123,9 +128,8 @@ PHPUNIT_ERRORS="${PHPUNIT_ERRORS:-0}"
 PHPUNIT_SKIPPED="${PHPUNIT_SKIPPED:-0}"
 PHPUNIT_INCOMPLETE="${PHPUNIT_INCOMPLETE:-0}"
 
-git config --global --add safe.directory /app
-BRANCH="$(git -C /app rev-parse --abbrev-ref HEAD)"
-SHA="$(git -C /app rev-parse HEAD)"
+BRANCH="${HOST_BRANCH}"
+SHA="${HOST_SHA}"
 DATE="$(date -u +%Y-%m-%d)"
 
 cat >"${ARTIFACT_FILE}" <<EOF
@@ -135,9 +139,9 @@ branch: ${BRANCH}
 sha: ${SHA}
 tests: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\(([0-9]+) tests.*/\\1/p; s/^Tests: ([0-9]+).*/\\1/p" | head -n1)
 assertions: $(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default.log | tail -n1 | sed -nE "s/^OK \\([0-9]+ tests, ([0-9]+) assertions.*/\\1/p; s/^Tests: [0-9]+, Assertions: ([0-9]+).*/\\1/p" | head -n1)
-failures: ${PHPUNIT_FAILURES:-0}
-errors: ${PHPUNIT_ERRORS:-0}
-skipped/incomplete: ${PHPUNIT_SKIPPED:-0} skipped, ${PHPUNIT_INCOMPLETE:-0} incomplete
+failures: ${PHPUNIT_FAILURES}
+errors: ${PHPUNIT_ERRORS}
+skipped/incomplete: ${PHPUNIT_SKIPPED} skipped, ${PHPUNIT_INCOMPLETE} incomplete
 php: ${PHP_VERSION}
 composer: ${COMPOSER_VERSION}
 openssh: ${OPENSSH_VERSION}
