@@ -101,10 +101,10 @@ PKG_VERSIONS="$(composer show --no-ansi --direct 2>/dev/null | awk "{print \$1\"
 run_phpunit() {
   local name="$1"
   shift
-  local cmd=(php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result "$@")
-  printf "COMMAND[%s]: %q\n" "${name}" "${cmd[@]}"
+  local extra="$*"
+  printf "COMMAND[%s]: php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result%s\n" "${name}" "$( [ -n "${extra}" ] && printf " %s" "${extra}" )"
   set +e
-  "${cmd[@]}" 2>&1 | tee "/tmp/phpunit-${name}.log"
+  php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result "$@" 2>&1 | tee "/tmp/phpunit-${name}.log"
   local rc=$?
   set -e
   echo "${rc}" >"/tmp/phpunit-${name}.rc"
