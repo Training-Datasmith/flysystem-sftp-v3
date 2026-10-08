@@ -123,56 +123,13 @@ for gate in default-1 default-2 random-1 random-2; do
   fi
 done
 
-# Demonstrate stat-cache regression without the fromArray fix.
-cp SftpConnectionProvider.php /tmp/SftpConnectionProvider.php.bak
-php scripts/revert-stat-cache.php SftpConnectionProvider.php
-set +e
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
-  --filter "testDisableStatCacheFalseServesTheCachedSize|testFromArrayCopiesEveryOption" 2>&1 | tee /tmp/phpunit-stat-cache-broken.log
-STAT_CACHE_DEMO_RC=$?
-set -e
-mv /tmp/SftpConnectionProvider.php.bak SftpConnectionProvider.php
-if [ "${STAT_CACHE_DEMO_RC}" -eq 0 ]; then
-  echo "expected stat-cache regression tests to fail without production fix" >&2
-  exit 1
-fi
-
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
-  --filter "testDisableStatCacheFalseServesTheCachedSize|testFromArrayCopiesEveryOption"
-
-cp SftpAdapter.php /tmp/SftpAdapter.php.bak
-php scripts/revert-listcontents-cast.php SftpAdapter.php
-set +e
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
-  --filter testListContentsCastsNumericRawlistKeysToStringPaths 2>&1 | tee /tmp/phpunit-listcontents-cast-broken.log
-LISTCONTENTS_CAST_DEMO_RC=$?
-set -e
-mv /tmp/SftpAdapter.php.bak SftpAdapter.php
-if [ "${LISTCONTENTS_CAST_DEMO_RC}" -eq 0 ]; then
-  echo "expected numeric rawlist test to fail without (string) cast" >&2
-  exit 1
-fi
-
-cp SftpAdapter.php /tmp/SftpAdapter.php.bak
-php scripts/revert-copy-decline-visibility.php SftpAdapter.php
-set +e
-php -d error_reporting=-1 vendor/bin/phpunit --do-not-cache-result \
-  --filter testCopyCanDeclineRetainedVisibility 2>&1 | tee /tmp/phpunit-copy-visibility-broken.log
-COPY_VISIBILITY_DEMO_RC=$?
-set -e
-mv /tmp/SftpAdapter.php.bak SftpAdapter.php
-if [ "${COPY_VISIBILITY_DEMO_RC}" -eq 0 ]; then
-  echo "expected copy decline-visibility test to fail when retain is forced" >&2
-  exit 1
-fi
-
 DEFAULT_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-default-1.log | tail -n 6)"
 RANDOM_SUMMARY="$(grep -E "^OK \\(|^Tests:|^Assertions:|^Failures:|^Errors:|^Skipped:|^Incomplete:" /tmp/phpunit-random-1.log | tail -n 6)"
 
-PHPUNIT_FAILURES="$(grep -E "^Failures:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
-PHPUNIT_ERRORS="$(grep -E "^Errors:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
-PHPUNIT_SKIPPED="$(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default-1.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1)"
-PHPUNIT_INCOMPLETE="$(grep -E "^Incomplete:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//")"
+PHPUNIT_FAILURES="$(grep -E "^Failures:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//" || true)"
+PHPUNIT_ERRORS="$(grep -E "^Errors:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//" || true)"
+PHPUNIT_SKIPPED="$(grep -E "^OK \\(|^Tests:" /tmp/phpunit-default-1.log | tail -n1 | sed -nE "s/.*Skipped: ([0-9]+).*/\\1/p" | head -n1 || true)"
+PHPUNIT_INCOMPLETE="$(grep -E "^Incomplete:" /tmp/phpunit-default-1.log | tail -n1 | awk "{print \$2}" | sed "s/\\.$//" || true)"
 PHPUNIT_FAILURES="${PHPUNIT_FAILURES:-0}"
 PHPUNIT_ERRORS="${PHPUNIT_ERRORS:-0}"
 PHPUNIT_SKIPPED="${PHPUNIT_SKIPPED:-0}"
@@ -211,9 +168,7 @@ notes: |
   PRODUCTION CHANGES: SftpConnectionProvider::fromArray() now forwards disableStatCache (default true).
   DEFERRED: listContents root double-slash normalization; private-key prefix OR condition; delete return handling; SSH agent; fingerprint format expansions.
   ENVIRONMENT: Digest-pinned php:8.0.2-cli (amd64), Composer 2.2 with verified installer, config.platform.php=8.0.2, composer.lock removed on exit (not committed).
-  STAT_CACHE_DEMO_WITHOUT_FIX: exit ${STAT_CACHE_DEMO_RC} (non-zero expected).
-  LISTCONTENTS_CAST_DEMO_WITHOUT_FIX: exit ${LISTCONTENTS_CAST_DEMO_RC} (non-zero expected).
-  COPY_DECLINE_VISIBILITY_DEMO_WITHOUT_FIX: exit ${COPY_VISIBILITY_DEMO_RC} (non-zero expected).
+  REVERT_EVIDENCE (recorded earlier; run-tests.sh no longer mutates tracked production files): Removing disableStatCache from fromArray made testDisableStatCacheFalseServesTheCachedSize and testFromArrayCopiesEveryOption fail (exit 1). Removing the (string) cast in listContents made testListContentsCastsNumericRawlistKeysToStringPaths error with TypeError on ltrim (exit 2). Forcing copy() to always retain visibility made testCopyCanDeclineRetainedVisibility fail (exit 1).
   DEFAULT_RUN_SUMMARY:
 ${DEFAULT_SUMMARY}
   RANDOM_RUN_SUMMARY:
