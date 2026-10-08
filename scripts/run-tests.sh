@@ -164,4 +164,9 @@ EOF
 rm -f /app/composer.lock
 '
 
+if [ -f "${ARTIFACT_FILE}" ]; then
+  sed -i "s/^sha:.*/sha: $(git -C "${ROOT}" rev-parse HEAD)/" "${ARTIFACT_FILE}"
+  sed -i "s/^branch:.*/branch: $(git -C "${ROOT}" rev-parse --abbrev-ref HEAD)/" "${ARTIFACT_FILE}"
+fi
+
 echo "Wrote ${ARTIFACT_FILE}"
